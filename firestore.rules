@@ -1,0 +1,272 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && isEmailVerified() && request.auth.uid == userId;
+    }
+
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 120
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 200
+        && data.photoURL is string
+        && data.photoURL.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWatchlistItem(data, userId) {
+      return data.keys().hasAll(['userId', 'symbol', 'name', 'exchange', 'sector', 'addedAt'])
+        && data.keys().hasOnly(['userId', 'symbol', 'name', 'exchange', 'sector', 'addedAt'])
+        && data.userId is string
+        && data.userId.size() >= 1
+        && data.userId.size() <= 128
+        && data.userId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.symbol is string
+        && data.symbol.size() >= 1
+        && data.symbol.size() <= 24
+        && data.symbol.matches('^[A-Z0-9.\\-&]+$')
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.exchange in ['NSE', 'BSE']
+        && data.sector is string
+        && data.sector.size() >= 1
+        && data.sector.size() <= 60
+        && data.addedAt is timestamp;
+    }
+
+    function isValidPerformanceLog(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'date', 'symbol', 'exchange', 'closingPrice',
+          'dailyChangePct', 'signal', 'reason', 'source', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'date', 'symbol', 'exchange', 'closingPrice',
+          'dailyChangePct', 'signal', 'reason', 'source', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId.size() >= 1
+        && data.userId.size() <= 128
+        && data.userId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.date is string
+        && data.date.size() == 10
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.symbol is string
+        && data.symbol.size() >= 1
+        && data.symbol.size() <= 24
+        && data.symbol.matches('^[A-Z0-9.\\-&]+$')
+        && data.exchange in ['NSE', 'BSE']
+        && data.closingPrice is number
+        && data.closingPrice > 0
+        && data.closingPrice <= 10000000
+        && data.dailyChangePct is number
+        && data.dailyChangePct >= -100
+        && data.dailyChangePct <= 1000
+        && data.signal in ['Buy', 'Sell', 'Hold']
+        && data.reason is string
+        && data.reason.size() >= 1
+        && data.reason.size() <= 200
+        && data.source in ['auto', 'import']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPriceAlert(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'symbol', 'exchange', 'condition', 'targetPrice',
+          'status', 'triggeredPrice', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'symbol', 'exchange', 'condition', 'targetPrice',
+          'status', 'triggeredPrice', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId.size() >= 1
+        && data.userId.size() <= 128
+        && data.userId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.symbol is string
+        && data.symbol.size() >= 1
+        && data.symbol.size() <= 24
+        && data.symbol.matches('^[A-Z0-9.\\-&]+$')
+        && data.exchange in ['NSE', 'BSE']
+        && data.condition in ['above', 'below']
+        && data.targetPrice is number
+        && data.targetPrice > 0
+        && data.targetPrice <= 10000000
+        && data.status in ['active', 'triggered']
+        && data.triggeredPrice is number
+        && data.triggeredPrice >= 0
+        && data.triggeredPrice <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      // PII Isolation: Only owner can read their profile; listing /users is denied.
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'updatedAt']);
+
+      allow delete: if false;
+
+      match /watchlist/{itemId} {
+        allow get: if isValidId(userId) && isValidId(itemId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(itemId)
+          && isOwner(userId)
+          && isValidWatchlistItem(incoming(), userId)
+          && incoming().addedAt == request.time
+          && userExists(userId);
+
+        allow update: if false;
+
+        allow delete: if isValidId(userId)
+          && isValidId(itemId)
+          && isOwner(userId)
+          && userExists(userId);
+      }
+
+      match /performanceLogs/{logId} {
+        allow get: if isValidId(userId) && isValidId(logId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(logId)
+          && isOwner(userId)
+          && isValidPerformanceLog(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && userExists(userId);
+
+        allow update: if isValidId(userId)
+          && isValidId(logId)
+          && isOwner(userId)
+          && isValidPerformanceLog(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().date == existing().date
+          && incoming().symbol == existing().symbol
+          && incoming().exchange == existing().exchange
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'closingPrice', 'dailyChangePct', 'signal', 'reason', 'source', 'updatedAt'
+          ])
+          && userExists(userId);
+
+        allow delete: if isValidId(userId)
+          && isValidId(logId)
+          && isOwner(userId)
+          && userExists(userId);
+      }
+
+      match /priceAlerts/{alertId} {
+        allow get: if isValidId(userId) && isValidId(alertId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(alertId)
+          && isOwner(userId)
+          && isValidPriceAlert(incoming(), userId)
+          && incoming().status == 'active'
+          && incoming().triggeredPrice == 0
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && userExists(userId);
+
+        allow update: if isValidId(userId)
+          && isValidId(alertId)
+          && isOwner(userId)
+          && isValidPriceAlert(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().symbol == existing().symbol
+          && incoming().exchange == existing().exchange
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && userExists(userId)
+          && (
+            (
+              existing().status == 'active'
+              && incoming().status == 'triggered'
+              && incoming().triggeredPrice > 0
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'triggeredPrice', 'updatedAt'])
+            ) || (
+              incoming().status == 'active'
+              && incoming().triggeredPrice == 0
+              && incoming().diff(existing()).affectedKeys().hasOnly(['condition', 'targetPrice', 'status', 'triggeredPrice', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isValidId(userId)
+          && isValidId(alertId)
+          && isOwner(userId)
+          && userExists(userId);
+      }
+    }
+  }
+}

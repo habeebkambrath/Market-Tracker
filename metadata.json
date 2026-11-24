@@ -1,0 +1,6 @@
+{
+  "name": "Market Tracker",
+  "description": "Indian Stock Market (NSE & BSE) watchlist, technical signal analyzer, and daily closing price performance tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

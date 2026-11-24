@@ -1,0 +1,222 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated Market Tracker user profile with isolated workspace ownership.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "email", "photoURL", "createdAt", "updatedAt"]
+    },
+    "WatchlistItem": {
+      "title": "WatchlistItem",
+      "description": "An NSE or BSE stock tracked in a user's personal watchlist.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9.\\-&]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "exchange": {
+          "type": "string",
+          "enum": ["NSE", "BSE"]
+        },
+        "sector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "symbol", "name", "exchange", "sector", "addedAt"]
+    },
+    "PerformanceLog": {
+      "title": "PerformanceLog",
+      "description": "Day-by-day closing price and technical signal record for a tracked Indian stock.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9.\\-&]+$"
+        },
+        "exchange": {
+          "type": "string",
+          "enum": ["NSE", "BSE"]
+        },
+        "closingPrice": {
+          "type": "number"
+        },
+        "dailyChangePct": {
+          "type": "number"
+        },
+        "signal": {
+          "type": "string",
+          "enum": ["Buy", "Sell", "Hold"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "source": {
+          "type": "string",
+          "enum": ["auto", "import"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "date",
+        "symbol",
+        "exchange",
+        "closingPrice",
+        "dailyChangePct",
+        "signal",
+        "reason",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PriceAlert": {
+      "title": "PriceAlert",
+      "description": "User-configured target price threshold alert for an NSE or BSE watchlist stock.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9.\\-&]+$"
+        },
+        "exchange": {
+          "type": "string",
+          "enum": ["NSE", "BSE"]
+        },
+        "condition": {
+          "type": "string",
+          "enum": ["above", "below"]
+        },
+        "targetPrice": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "triggered"]
+        },
+        "triggeredPrice": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "symbol",
+        "exchange",
+        "condition",
+        "targetPrice",
+        "status",
+        "triggeredPrice",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile document storing verified Google account metadata."
+    },
+    "/users/{userId}/watchlist/{itemId}": {
+      "schema": { "$ref": "#/entities/WatchlistItem" },
+      "description": "User-isolated watchlist of NSE and BSE stocks."
+    },
+    "/users/{userId}/performanceLogs/{logId}": {
+      "schema": { "$ref": "#/entities/PerformanceLog" },
+      "description": "User-isolated daily closing price and signal ledger."
+    },
+    "/users/{userId}/priceAlerts/{alertId}": {
+      "schema": { "$ref": "#/entities/PriceAlert" },
+      "description": "User-isolated stock price threshold alerts."
+    }
+  }
+}
